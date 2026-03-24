@@ -45,9 +45,9 @@ func (e *Environment) Run() {
 	// All apis will write to this channel
 	// and the main execution thread, Start
 	// will be the one executing all tasks.Fn from callbackCh
-	callbackCh := make(chan *Task)
-	defer close(timeoutCh)
-	defer close(callbackCh)
+	callbackCh := make(chan *Task, 100)
+	// defer close(timeoutCh)
+	// defer close(callbackCh)
 
 	allTasks := len(e.Stack)
 	executedTasks := 0
@@ -55,7 +55,7 @@ func (e *Environment) Run() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	go e.runMicroQueue(ctx, timeoutCh, callbackCh)
+	go runMicroQueue(ctx, timeoutCh, callbackCh)
 
 	for _, task := range e.Stack {
 		if task.Duration != nil {
@@ -91,7 +91,7 @@ func (e *Environment) Run() {
 // At the moment, the runMicroQueue is used to run timeout functions
 // but in the Node Environment the timeout queue is responsible for this
 // This queue will later be used to run await based code
-func (e *Environment) runMicroQueue(ctx context.Context, in <-chan *Task, cbCh chan<- *Task) {
+func runMicroQueue(ctx context.Context, in <-chan *Task, cbCh chan<- *Task) {
 	for {
 		select {
 		case <-ctx.Done():
