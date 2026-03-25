@@ -27,13 +27,22 @@ const (
 
 // IMPLEMENTATION
 // After executing tasks that are synchronous execute code in the MicroTasks Queue
-
-// type Meta struct {
-// 	Duration *time.Duration
-//
-// 	Async bool // mark functions as promises
-// 	IO    bool
+// Problem statement
+// We need a way to context-switch between each queue and the main stack
+// Although Node doesnt 'context-switch', everything is turn based
+// select {
+//  case <-fromMainStack:
 // }
+// 					mainStack microQueue ioQueue timerQueue
+// 						^          *
+// 						*          ^
+// 						^          _        *
+// 						*          _        ^
+// 						^          _        _        *
+//
+//  ^ :  current_execution_s
+//  _ :  already_emptied_s
+//  * :  next_executino_s
 
 type Process struct {
 	Id       string
@@ -148,11 +157,10 @@ func (rt *Runtime) Run() {
 		fmt.Println(" ==========")
 
 	}
-	// The promise queue are basically functions that
-	// are native promises in js ie async/await
+	// The promise queue contains functions that are native promises in js ie async/await
 	// Since these functions need to be executed in the background, their
-	// results and error are provided in the process, and now Run can just
-	// read from them instead of wrapping it in another function
+	// results and error are provided in the process' fields, and now Run can just
+	// read from them instead of calling a wrapped-around function
 	promiseCallbacks := drainQueue(promiseQueue)
 	for _, process := range promiseCallbacks {
 		totalExecuted++
