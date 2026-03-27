@@ -12,6 +12,18 @@ import (
 // describes the type and nature of Task
 type Meta int
 
+const (
+	// Synchronous task
+	NoMeta Meta = iota
+
+	NextTickerMeta
+
+	// Async/Await task
+	PromiseMeta
+
+	IOMeta
+)
+
 type Task struct {
 	// Name of the function or any uuid
 	Id      string
@@ -32,7 +44,9 @@ type Runtime struct {
 	inflight    *atomic.Int64
 	stack       *queue
 	promiseQ    *queue
+	ioQ         *queue
 	nextTickerQ *queue
+	ctx         context.Context
 }
 
 func newQueue() *queue {
@@ -46,6 +60,7 @@ func NewRuntime() *Runtime {
 		inflight:    &atomic.Int64{},
 		stack:       newQueue(),
 		promiseQ:    newQueue(),
+		ioQ:         newQueue(),
 		nextTickerQ: newQueue(),
 	}
 }
@@ -59,17 +74,22 @@ func (rt *Runtime) Start(source <-chan *Task, done chan any) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	rt.ctx = ctx
+
 	// All synchronous code from the source will be executed first
 	// until it closes
 	stackCh := make(chan *Task, 100)
 	go rt.startEnvironments(ctx, source, stackCh)
 
 	// Once the source channel has been closed, this channel will also
-	// get closed, meaning, no more synchronous code to run, and we can
-	// proceed into looking to execute other queues
+	// The receiver will always be waiting. This is to make sure
+	// that the caller doesn't exit before we finish executing all tasks
 	defer func() {
 		done <- true
 	}()
+
+	// if the stack is closed, synchronous code to run, and we can
+	// proceed into looking to execute other queues
 	log.Printf("executing all sync code\n\n")
 	for task := range stackCh {
 		result, err := task.Execute()
@@ -97,19 +117,7 @@ func (rt *Runtime) Start(source <-chan *Task, done chan any) {
 
 	rt.eventLoop(ctx)
 
-	// The receiver will always be waiting. This is to make sure
-	// that the caller doesn't exit before we finish executing all tasks
 }
-
-const (
-	// Synchronous task
-	NoMeta Meta = iota
-
-	NextTickerMeta
-
-	// Async/Await task
-	PromiseMeta
-)
 
 // All tasks that are not syncrhonous ie NoMeta have
 // their code executed in a seperate goroutine. When done,
@@ -140,6 +148,8 @@ func (rt *Runtime) startEnvironments(ctx context.Context, src <-chan *Task, stac
 				appendToQueue(rt.nextTickerQ, t)
 			case PromiseMeta:
 				go rt.execPromise(t)
+			case IOMeta:
+				go rt.execIO(t)
 
 			}
 
@@ -151,11 +161,11 @@ func (rt *Runtime) startEnvironments(ctx context.Context, src <-chan *Task, stac
 // order described in the docs. It breaks out by checking that the number of inflight go-routines
 // is 0, otherwise, it continues running
 func (rt *Runtime) eventLoop(ctx context.Context) {
-	defer cleanUp()
+	defer cleanUp(rt)
 
 	pref := "evt_loop"
 	for {
-		time.Sleep(20) // avoid averruning
+		time.Sleep(20 * time.Millisecond) // avoid overruning
 		if ctx.Err() != nil {
 			errLogger.Println("evtloop leaving, error-> ", ctx.Err())
 			return
@@ -207,9 +217,13 @@ type result struct {
 // runIO simulates libuv's C++ os capabilities. After executing fn
 // it's result and error are both passed into the done channel.
 // Callers should run this in a goroutine to avoid blocking
-func runIO(fn fn, done chan<- *result) {
+func runIO(ctx context.Context, fn fn, done chan<- *result) {
 	res, err := fn()
-	done <- &result{success: res, err: err}
+	select {
+	case <-ctx.Done():
+		return
+	case done <- &result{success: res, err: err}:
+	}
 }
 
 // This is to simulate Node & C++ bindings itself. When a task is marked as async
@@ -222,13 +236,18 @@ func runIO(fn fn, done chan<- *result) {
 // has been wrapped, the goroutine reduces the inflight field in rt *Runtime
 func (rt *Runtime) wrapPromise(t *Task) {
 	done := make(chan *result)
-	go runIO(t.Execute, done)
+	go runIO(rt.ctx, t.Execute, done)
 	go func() {
-		res := <-done
-		t.reject = res.err
-		t.resolve = res.success
-		appendToQueue(rt.promiseQ, t)
-		rt.inflight.Add(-1)
+		select {
+		case <-rt.ctx.Done():
+			return
+		case res := <-done:
+			t.reject = res.err
+			t.resolve = res.success
+			appendToQueue(rt.promiseQ, t)
+			rt.inflight.Add(-1)
+		}
+
 	}()
 }
 

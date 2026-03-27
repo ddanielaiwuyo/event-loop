@@ -3,7 +3,7 @@ package runtime
 // Where possible, incase of early returns we'll need
 // to clear all other queues, but while this doesn't seem
 // neccessary at the moment, it's good to have in mind
-func cleanUp() {
+func cleanUp(rt *Runtime) {
 	logger.Println("cleaning up")
 }
 
