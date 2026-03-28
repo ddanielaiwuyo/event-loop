@@ -125,3 +125,10 @@ func main() {
 
 ### Contribution
 Feel free to contribute, project is open to Pull Requests
+Make sure there are no race conditions and unreleased locks, which are more 
+harder. You can use go's built in race detector
+```bash
+go run --race main.go
+```
+
+It will interrupt the whole program if there are race conditions
