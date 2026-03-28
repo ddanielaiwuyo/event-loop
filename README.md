@@ -45,6 +45,13 @@ go run main.go
 ## To schedule a program
 You can use the `Task` type
 ```go
+package main
+
+import (
+	"persona/runtime"
+	"sync"
+)
+
 type Task struct {
 	// Name of the function or any uuid
 	Id      string

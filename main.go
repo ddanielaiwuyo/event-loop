@@ -35,10 +35,8 @@ func makeHttpRequest() (any, error) {
 	}
 
 	_ = content
-	// fmt.Printf("response from example.com")
-	// fmt.Println(string(content))
 	t := time.Since(n)
-	fmt.Printf("tt for whole_request: %+v\n", t)
+	fmt.Printf("  total time to make request: %+v\n", t)
 	return "http_request successfull", io.EOF
 }
 
