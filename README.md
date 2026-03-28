@@ -1,4 +1,4 @@
-### NodeJS Eventloop Simulation
+# NodeJS Eventloop Simulation
 
 
 Node's event loop seems to be a mystery to most people, especially 
@@ -34,7 +34,7 @@ The left rest to implement are:
 
 For a summary guide, [doc.md](./doc.md)
 
-### Run the program
+# Run the program
 Make sure you have the Go Compiler installed, visit [Go](https://go.dev/dl)
 ```bash
 git clone https://github.com/persona-mp3/event-loop.git ~/event-loop
