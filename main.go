@@ -37,7 +37,7 @@ func makeHttpRequest() (any, error) {
 	_ = content
 	t := time.Since(n)
 	fmt.Printf("  total time to make request: %+v\n", t)
-	return "http_request successfull", io.EOF
+	return "http_request successfull", nil
 }
 
 func readInput() (any, error) {

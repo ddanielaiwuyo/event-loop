@@ -34,6 +34,7 @@ type Task struct {
 	// Name of the function or any uuid
 	Id      string
 	Execute func() (any, error)
+
 	// Kind of function
 	Meta
 	// for promises.resolve and promises.reject
@@ -51,6 +52,7 @@ type Runtime struct {
 	stack       *queue
 	promiseQ    *queue
 	nextTickerQ *queue
+	exitStatus  int
 	ctx         context.Context
 }
 
@@ -89,7 +91,7 @@ func (rt *Runtime) Start(source <-chan *Task, done chan any) {
 	// The receiver will always be waiting. This is to make sure
 	// that the caller doesn't exit before we finish executing all tasks
 	defer func() {
-		done <- true
+		done <- rt.exitStatus
 	}()
 
 	// if the stack is closed, synchronous code to run, and we can
@@ -100,6 +102,7 @@ func (rt *Runtime) Start(source <-chan *Task, done chan any) {
 		if err != nil {
 			errLogger.Printf("err executing func: %s\n", task.Id)
 			errLogger.Printf("%3s\n", err)
+			rt.exitStatus = 1
 			return
 		}
 
@@ -110,12 +113,14 @@ func (rt *Runtime) Start(source <-chan *Task, done chan any) {
 	log.Printf("executing nextTickerQueue\n\n")
 	nextTickerQ := rt.drainQueue(rt.nextTickerQ)
 	if err := execTasks(nextTickerQ); err != nil {
+		rt.exitStatus = 1
 		return
 	}
 
 	log.Printf("executing promise queue\n\n")
 	promises := rt.drainQueue(rt.promiseQ)
 	if err := execPromises(promises); err != nil {
+		rt.exitStatus = 1
 		return
 	}
 
@@ -148,14 +153,14 @@ func (rt *Runtime) startEnvironments(ctx context.Context, src <-chan *Task, stac
 			switch t.Meta {
 			case SyncMeta:
 				stackCh <- t
+			case IOMeta:
+				stackCh <- t
 			case NextTickerMeta: // no speical operations get ran in the nextTickerQ, its just like appending to the stack
 				appendToQueue(rt.nextTickerQ, t)
 			case PromiseMeta:
 				go rt.nodeExecPromise(t)
 			case AsyncIOMeta:
 				rt.nodeWrapPromise(ctx, t)
-				// case IOMeta:
-				// 	go rt.execIO(t)
 
 			}
 
@@ -185,12 +190,14 @@ func (rt *Runtime) eventLoop(ctx context.Context) {
 		log.Printf("executing nextTicker queue\n\n")
 		nextTickerQ := rt.drainQueue(rt.nextTickerQ)
 		if err := execTasks(nextTickerQ); err != nil {
+			rt.exitStatus = 1
 			return
 		}
 
 		log.Printf("execuing promise queue\n\n")
 		promises := rt.drainQueue(rt.promiseQ)
 		if err := execPromises(promises); err != nil {
+			rt.exitStatus = 1
 			return
 		}
 	}

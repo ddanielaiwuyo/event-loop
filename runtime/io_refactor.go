@@ -3,8 +3,8 @@ package runtime
 import "context"
 
 // NOTE: v8 cannot make syscalls or access the filesystem,
-// it relies on libuv to do that, and then the result or error 
-// is propagated via Node to v8. Also depending on the api used
+// it relies on libuv to do that, and then the result or error, is wrapped
+// via Node for v8 to handle. Also depending on the api used
 // ie `promises`, it doesn't go to the promise queue, and to reduce 
 // abstraction, we'll execute the function as a NoMeta task leaving 
 // only execAsyncIO as the promise version
